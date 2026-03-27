@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { GoogleGenAI } from "@google/genai";
 import { 
   Calculator, 
   TrendingDown, 
@@ -55,16 +56,48 @@ export default function App() {
   const [leverage, setLeverage] = useState<number>(200);
 
   // Grid Inputs
-  const [balance, setBalance] = useState<number>(11000);
-  const [lotSize, setLotSize] = useState<number>(0.23);
-  const [initialPrice, setInitialPrice] = useState<number>(4700);
-  const [gridDistance, setGridDistance] = useState<number>(20);
-  const [stepNo, setStepNo] = useState<number>(11);
+  const [balance, setBalance] = useState<number>(0);
+  const [lotSize, setLotSize] = useState<number>(0);
+  const [initialPrice, setInitialPrice] = useState<number>(0);
+  const [gridDistance, setGridDistance] = useState<number>(0);
+  const [stepNo, setStepNo] = useState<number>(1);
 
   // Profit/Risk Inputs
-  const [buyPrice, setBuyPrice] = useState<number>(4700);
-  const [sellPrice, setSellPrice] = useState<number>(5005);
-  const [baseCapital, setBaseCapital] = useState<number>(1000);
+  const [buyPrice, setBuyPrice] = useState<number>(0);
+  const [sellPrice, setSellPrice] = useState<number>(0);
+  const [baseCapital, setBaseCapital] = useState<number>(0);
+  const [isFetchingPrice, setIsFetchingPrice] = useState(false);
+
+  // Fetch Live Gold Price using Gemini
+  const fetchLiveGoldPrice = async () => {
+    setIsFetchingPrice(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: "What is the current live gold price per ounce in USD? Return ONLY the numeric value, no symbols or text.",
+        config: {
+          tools: [{ googleSearch: {} }],
+        },
+      });
+      
+      const priceText = response.text.replace(/[^0-9.]/g, '');
+      const price = parseFloat(priceText);
+      
+      if (!isNaN(price) && price > 0) {
+        setInitialPrice(price);
+        setBuyPrice(price);
+      }
+    } catch (error) {
+      console.error("Error fetching gold price:", error);
+    } finally {
+      setIsFetchingPrice(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveGoldPrice();
+  }, []);
 
   // Derived Calculations for Grid
   const gridResults = useMemo((): CalculationResults => {
@@ -176,10 +209,18 @@ export default function App() {
                   </div>
                   
                   <div className="space-y-4">
-                    <InputGroup label="Account Balance ($)" value={balance} onChange={setBalance} icon="$" />
-                    <InputGroup label="Fixed Lot Size" value={lotSize} onChange={setLotSize} step={0.01} icon="L" />
-                    <InputGroup label="Initial Gold Price ($)" value={initialPrice} onChange={setInitialPrice} icon="P" />
-                    <InputGroup label="Grid Distance ($)" value={gridDistance} onChange={setGridDistance} icon="D" />
+                    <InputGroup label="Account Balance ($)" value={balance} onChange={setBalance} icon="$" example="11000" />
+                    <InputGroup label="Fixed Lot Size" value={lotSize} onChange={setLotSize} step={0.01} icon="L" example="Based on your risk level calculate from Profit & Risk" />
+                    <InputGroup 
+                      label="Initial Gold Price ($)" 
+                      value={initialPrice} 
+                      onChange={setInitialPrice} 
+                      icon="P" 
+                      example="4700" 
+                      onFetchLive={fetchLiveGoldPrice}
+                      isFetching={isFetchingPrice}
+                    />
+                    <InputGroup label="Grid Distance ($)" value={gridDistance} onChange={setGridDistance} icon="D" example="4" />
                     <InputGroup label="Current Step No" value={stepNo} onChange={setStepNo} min={1} max={100} icon="#" />
                     
                     <div className="pt-4">
@@ -295,9 +336,17 @@ export default function App() {
                     <h2 className="text-xs font-bold uppercase tracking-widest text-[#D4AF37]">Calculation Inputs</h2>
                   </div>
                   <div className="space-y-4">
-                    <InputGroup label="Buy Price ($)" value={buyPrice} onChange={setBuyPrice} icon="B" />
-                    <InputGroup label="Sell Price ($)" value={sellPrice} onChange={setSellPrice} icon="S" />
-                    <InputGroup label="Base Capital ($)" value={baseCapital} onChange={setBaseCapital} icon="C" />
+                    <InputGroup 
+                      label="Buy Price ($)" 
+                      value={buyPrice} 
+                      onChange={setBuyPrice} 
+                      icon="B" 
+                      example="4700" 
+                      onFetchLive={fetchLiveGoldPrice}
+                      isFetching={isFetchingPrice}
+                    />
+                    <InputGroup label="Sell Price ($)" value={sellPrice} onChange={setSellPrice} icon="S" example="5005" />
+                    <InputGroup label="Base Capital ($)" value={baseCapital} onChange={setBaseCapital} icon="C" example="1000" />
                     
                     <div className="pt-4">
                       <label className="text-[10px] uppercase font-bold tracking-widest opacity-80 mb-2 block text-[#D4AF37]">
@@ -439,7 +488,10 @@ function InputGroup({
   step = 1, 
   min = 0, 
   max = 1000000,
-  icon 
+  icon,
+  example,
+  onFetchLive,
+  isFetching
 }: { 
   label: string; 
   value: number; 
@@ -448,12 +500,33 @@ function InputGroup({
   min?: number;
   max?: number;
   icon: string;
+  example?: string;
+  onFetchLive?: () => void;
+  isFetching?: boolean;
 }) {
+  const isLongExample = example && example.length > 20;
+
   return (
     <div className="group">
-      <label className="text-[10px] uppercase font-bold tracking-widest opacity-80 mb-1.5 block group-focus-within:opacity-100 transition-opacity text-[#D4AF37]">
-        {label}
-      </label>
+      <div className="flex justify-between items-center mb-1.5">
+        <label className="text-[10px] uppercase font-bold tracking-widest opacity-80 block group-focus-within:opacity-100 transition-opacity text-[#D4AF37]">
+          {label}
+        </label>
+        {onFetchLive && (
+          <button 
+            onClick={onFetchLive}
+            disabled={isFetching}
+            className="text-[8px] uppercase font-bold tracking-wider text-[#D4AF37] border border-[#D4AF37]/30 px-1.5 py-0.5 hover:bg-[#D4AF37] hover:text-[#0A0A0A] transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1"
+          >
+            {isFetching ? (
+              <RefreshCcw className="w-2 h-2 animate-spin" />
+            ) : (
+              <RefreshCcw className="w-2 h-2" />
+            )}
+            Live
+          </button>
+        )}
+      </div>
       <div className="relative">
         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold text-[#D4AF37]/50 group-focus-within:text-[#D4AF37]">
           {icon}
@@ -465,9 +538,19 @@ function InputGroup({
           step={step}
           min={min}
           max={max}
-          className="w-full bg-[#222222] border border-[#D4AF37]/40 py-2.5 pl-8 pr-3 text-sm font-mono text-[#D4AF37] focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition-all placeholder-[#D4AF37]/20"
+          className={`w-full bg-[#222222] border border-[#D4AF37]/40 py-2.5 pl-8 ${example && !isLongExample ? "pr-16" : "pr-3"} text-sm font-mono text-[#D4AF37] focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition-all placeholder-[#D4AF37]/20`}
         />
+        {example && !isLongExample && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-mono text-[#D4AF37]/30 pointer-events-none">
+            EX: {example}
+          </div>
+        )}
       </div>
+      {example && isLongExample && (
+        <div className="mt-1 text-[8px] font-mono text-[#D4AF37]/40 uppercase leading-tight italic">
+          * {example}
+        </div>
+      )}
     </div>
   );
 }
