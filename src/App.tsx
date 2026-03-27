@@ -70,7 +70,7 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   // Fetch Live Gold Price
-  const fetchLiveGoldPrice = async () => {
+  const fetchLiveGoldPrice = async (isAuto = false) => {
     setIsFetchingPrice(true);
     try {
       // Primary Source: Public Gold API (Fast & Direct)
@@ -79,14 +79,22 @@ export default function App() {
         const data = await apiResponse.json();
         if (data && data.price) {
           setInitialPrice(data.price);
-          setBuyPrice(data.price);
+          // Only update buyPrice if it's the initial load or a manual trigger from a relevant button
+          // But based on user request, we'll stop auto-updating buyPrice entirely
+          if (!isAuto && activeTab === "profit") {
+            setBuyPrice(data.price);
+          } else if (!isAuto && activeTab === "grid") {
+            // If manually triggered from grid, maybe they only want to update grid?
+            // For now, let's just keep initialPrice synced.
+          }
+          
           setLastUpdated(new Date().toLocaleTimeString());
           setIsFetchingPrice(false);
           return;
         }
       }
 
-      // Fallback Source: Gemini Search (Robust but slower)
+      // Fallback Source: Gemini Search
       const apiKey = process.env.GEMINI_API_KEY;
       if (apiKey && apiKey !== "undefined") {
         const ai = new GoogleGenAI({ apiKey });
@@ -99,7 +107,9 @@ export default function App() {
         const price = parseFloat(response.text.replace(/[^0-9.]/g, ''));
         if (!isNaN(price) && price > 0) {
           setInitialPrice(price);
-          setBuyPrice(price);
+          if (!isAuto && activeTab === "profit") {
+            setBuyPrice(price);
+          }
           setLastUpdated(new Date().toLocaleTimeString());
         }
       }
@@ -111,9 +121,27 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchLiveGoldPrice();
-    // Auto-update every 60 seconds
-    const interval = setInterval(fetchLiveGoldPrice, 60000);
+    // Initial fetch updates both to give a starting point
+    const initialFetch = async () => {
+      setIsFetchingPrice(true);
+      try {
+        const apiResponse = await fetch("https://api.gold-api.com/price/XAU");
+        if (apiResponse.ok) {
+          const data = await apiResponse.json();
+          if (data && data.price) {
+            setInitialPrice(data.price);
+            setBuyPrice(data.price);
+            setLastUpdated(new Date().toLocaleTimeString());
+          }
+        }
+      } catch (e) { console.error(e); }
+      setIsFetchingPrice(false);
+    };
+    
+    initialFetch();
+
+    // Auto-update every 60 seconds ONLY for initialPrice (Grid)
+    const interval = setInterval(() => fetchLiveGoldPrice(true), 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -363,8 +391,6 @@ export default function App() {
                       onChange={setBuyPrice} 
                       icon="B" 
                       example="4700" 
-                      onFetchLive={fetchLiveGoldPrice}
-                      isFetching={isFetchingPrice}
                     />
                     <InputGroup label="Sell Price ($)" value={sellPrice} onChange={setSellPrice} icon="S" example="5005" />
                     <InputGroup label="Base Capital ($)" value={baseCapital} onChange={setBaseCapital} icon="C" example="1000" />
