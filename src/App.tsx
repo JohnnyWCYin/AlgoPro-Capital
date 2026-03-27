@@ -58,21 +58,28 @@ export default function App() {
   // Grid Inputs
   const [balance, setBalance] = useState<number>(0);
   const [lotSize, setLotSize] = useState<number>(0);
-  const [initialPrice, setInitialPrice] = useState<number>(0);
+  const [initialPrice, setInitialPrice] = useState<number>(2700);
   const [gridDistance, setGridDistance] = useState<number>(0);
   const [stepNo, setStepNo] = useState<number>(1);
 
   // Profit/Risk Inputs
-  const [buyPrice, setBuyPrice] = useState<number>(0);
+  const [buyPrice, setBuyPrice] = useState<number>(2700);
   const [sellPrice, setSellPrice] = useState<number>(0);
   const [baseCapital, setBaseCapital] = useState<number>(0);
   const [isFetchingPrice, setIsFetchingPrice] = useState(false);
 
   // Fetch Live Gold Price using Gemini
   const fetchLiveGoldPrice = async () => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    
+    if (!apiKey || apiKey === "undefined") {
+      console.warn("Gemini API Key is missing. Please set GEMINI_API_KEY in your environment variables.");
+      return;
+    }
+
     setIsFetchingPrice(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: "What is the current live gold price per ounce in USD? Return ONLY the numeric value, no symbols or text.",
