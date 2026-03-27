@@ -58,45 +58,53 @@ export default function App() {
   // Grid Inputs
   const [balance, setBalance] = useState<number>(0);
   const [lotSize, setLotSize] = useState<number>(0);
-  const [initialPrice, setInitialPrice] = useState<number>(2700);
+  const [initialPrice, setInitialPrice] = useState<number>(2730);
   const [gridDistance, setGridDistance] = useState<number>(0);
   const [stepNo, setStepNo] = useState<number>(1);
 
   // Profit/Risk Inputs
-  const [buyPrice, setBuyPrice] = useState<number>(2700);
+  const [buyPrice, setBuyPrice] = useState<number>(2730);
   const [sellPrice, setSellPrice] = useState<number>(0);
   const [baseCapital, setBaseCapital] = useState<number>(0);
   const [isFetchingPrice, setIsFetchingPrice] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
-  // Fetch Live Gold Price using Gemini
+  // Fetch Live Gold Price
   const fetchLiveGoldPrice = async () => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    
-    if (!apiKey || apiKey === "undefined") {
-      console.warn("Gemini API Key is missing. Please set GEMINI_API_KEY in your environment variables.");
-      return;
-    }
-
     setIsFetchingPrice(true);
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: "What is the current live gold price per ounce in USD? Return ONLY the numeric value, no symbols or text.",
-        config: {
-          tools: [{ googleSearch: {} }],
-        },
-      });
-      
-      const priceText = response.text.replace(/[^0-9.]/g, '');
-      const price = parseFloat(priceText);
-      
-      if (!isNaN(price) && price > 0) {
-        setInitialPrice(price);
-        setBuyPrice(price);
+      // Primary Source: Public Gold API (Fast & Direct)
+      const apiResponse = await fetch("https://api.gold-api.com/price/XAU");
+      if (apiResponse.ok) {
+        const data = await apiResponse.json();
+        if (data && data.price) {
+          setInitialPrice(data.price);
+          setBuyPrice(data.price);
+          setLastUpdated(new Date().toLocaleTimeString());
+          setIsFetchingPrice(false);
+          return;
+        }
+      }
+
+      // Fallback Source: Gemini Search (Robust but slower)
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (apiKey && apiKey !== "undefined") {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: "What is the current live gold price per ounce in USD? Return ONLY the numeric value.",
+          config: { tools: [{ googleSearch: {} }] },
+        });
+        
+        const price = parseFloat(response.text.replace(/[^0-9.]/g, ''));
+        if (!isNaN(price) && price > 0) {
+          setInitialPrice(price);
+          setBuyPrice(price);
+          setLastUpdated(new Date().toLocaleTimeString());
+        }
       }
     } catch (error) {
-      console.error("Error fetching gold price:", error);
+      console.error("Gold price sync failed:", error);
     } finally {
       setIsFetchingPrice(false);
     }
@@ -104,6 +112,9 @@ export default function App() {
 
   useEffect(() => {
     fetchLiveGoldPrice();
+    // Auto-update every 60 seconds
+    const interval = setInterval(fetchLiveGoldPrice, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   // Derived Calculations for Grid
@@ -164,8 +175,11 @@ export default function App() {
               <h1 className="text-xl font-bold tracking-tighter uppercase italic font-serif text-[#D4AF37]">
                 AlgoPro Capital
               </h1>
-              <div className="text-[10px] opacity-60 uppercase tracking-widest font-mono">
-                Premium Risk Management Suite
+              <div className="flex items-center gap-2">
+                <div className={`w-1.5 h-1.5 rounded-full ${isFetchingPrice ? "bg-yellow-500 animate-pulse" : "bg-green-500"}`} />
+                <p className="text-[8px] uppercase tracking-[0.2em] font-bold text-[#D4AF37]/60">
+                  {isFetchingPrice ? "Syncing Live Data..." : lastUpdated ? `Live: ${lastUpdated}` : "Premium Risk Management Suite"}
+                </p>
               </div>
             </div>
           </div>
