@@ -454,7 +454,7 @@ export default function App() {
                         <tbody className="font-mono text-[11px]">
                           {RISK_LEVELS.map((risk) => {
                             const ratio = baseCapital / risk.cap;
-                            const lot = ratio / 100;
+                            const lot = Math.round((ratio / 100) * 100) / 100;
                             const pl = (sellPrice - buyPrice) * lot * 100;
                             const margin = (buyPrice * lot * 100) / leverage;
                             return (
@@ -491,7 +491,7 @@ export default function App() {
                         <tbody className="font-mono text-[11px]">
                           {RISK_LEVELS.map((risk) => {
                             const ratio = baseCapital / risk.cap;
-                            const lot = ratio / 100;
+                            const lot = Math.round((ratio / 100) * 100) / 100;
                             return (
                               <tr key={risk.label} className="border-b border-[#D4AF37]/5 hover:bg-[#D4AF37]/5 transition-colors">
                                 <td className="p-3 border-r border-[#D4AF37]/10 text-[#D4AF37]/60 font-serif italic">{risk.label}</td>
